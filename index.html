@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Text Editor</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- pdf.js for rendering and text selection -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        // Set worker path
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+    <!-- pdf-lib for editing the PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <!-- FontKit for custom fonts if needed in pdf-lib -->
+    <script src="https://unpkg.com/@pdf-lib/fontkit/dist/fontkit.umd.min.js"></script>
+</head>
+<body>
+    <div class="toolbar">
+        <input type="file" id="file-upload" accept="application/pdf">
+        <button id="download-btn" disabled>Download Modified PDF</button>
+    </div>
+
+    <div id="pdf-container">
+        <!-- Canvas for rendering the PDF -->
+        <canvas id="pdf-canvas"></canvas>
+        <!-- Text layer for highlighting -->
+        <div id="text-layer" class="textLayer"></div>
+    </div>
+
+    <!-- The Popup for editing text -->
+    <div id="edit-popup" class="hidden">
+        <div class="popup-header">Edit Text (Same length)</div>
+        <input type="text" id="edit-input" autocomplete="off">
+        <div class="popup-actions">
+            <button id="save-edit-btn">Save</button>
+            <button id="cancel-edit-btn">Cancel</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

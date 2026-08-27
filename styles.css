@@ -1,0 +1,104 @@
+body {
+    font-family: sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f0f0f0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+.toolbar {
+    background-color: #333;
+    color: white;
+    padding: 10px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+#pdf-container {
+    position: relative;
+    margin: 20px auto;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    background-color: white;
+    /* We'll set dimensions dynamically */
+}
+
+/* pdf.js text layer required styles */
+.textLayer {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
+    opacity: 0.2; /* Set to > 0 for debugging, usually 0 */
+    line-height: 1.0;
+}
+
+.textLayer > span {
+    color: transparent;
+    position: absolute;
+    white-space: pre;
+    cursor: text;
+    transform-origin: 0% 0%;
+}
+
+.textLayer ::selection {
+    background: rgba(0, 0, 255, 0.3);
+    color: transparent;
+}
+
+/* Edit Popup styling */
+#edit-popup {
+    position: absolute;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    padding: 10px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+#edit-popup.hidden {
+    display: none;
+}
+
+.popup-header {
+    font-size: 12px;
+    color: #666;
+    font-weight: bold;
+}
+
+#edit-input {
+    font-family: inherit; /* Will be set dynamically */
+    padding: 4px;
+    border: 1px solid #007bff;
+    border-radius: 2px;
+}
+
+.popup-actions {
+    display: flex;
+    gap: 5px;
+    justify-content: flex-end;
+}
+
+.popup-actions button {
+    cursor: pointer;
+    padding: 4px 8px;
+    border: none;
+    border-radius: 3px;
+}
+
+#save-edit-btn {
+    background-color: #007bff;
+    color: white;
+}
+
+#cancel-edit-btn {
+    background-color: #ddd;
+}
