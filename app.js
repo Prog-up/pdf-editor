@@ -80,42 +80,25 @@ fileInput.addEventListener('change', async (e) => {
                     if (item.str.trim() !== '') fontIds.add(item.fontName);
                 }
                 
+                await tempPage.getOperatorList(); // Resolves all fonts into commonObjs
+                
                 for (const fontId of fontIds) {
-                    await new Promise((resolve) => {
-                        let resolved = false;
-                        const timeout = setTimeout(() => {
-                            if (!resolved) {
-                                resolved = true;
-                                resolve();
-                            }
-                        }, 500); // 500ms timeout
+                    try {
+                        const font = tempPage.commonObjs.get(fontId);
+                        let fName = (font && font.name) ? font.name : fontId;
+                        let realName = fName.includes('+') ? fName.split('+')[1] : fName;
                         
-                        try {
-                            tempPage.objs.get(fontId, (font) => {
-                                if (resolved) return;
-                                resolved = true;
-                                clearTimeout(timeout);
-                                let fName = (font && font.name) ? font.name : fontId;
-                                let realName = fName.includes('+') ? fName.split('+')[1] : fName;
-                                
-                                // Resolve aliases
-                                if (FONT_ALIASES[realName]) {
-                                    realName = FONT_ALIASES[realName];
-                                }
-                                
-                                if (!STANDARD_FONTS.includes(realName) && fontSelect.value !== 'custom') {
-                                    unsupportedFonts.add(realName);
-                                }
-                                resolve();
-                            });
-                        } catch (e) {
-                            if (!resolved) {
-                                resolved = true;
-                                clearTimeout(timeout);
-                                resolve();
-                            }
+                        // Resolve aliases
+                        if (FONT_ALIASES[realName]) {
+                            realName = FONT_ALIASES[realName];
                         }
-                    });
+                        
+                        if (!STANDARD_FONTS.includes(realName) && fontSelect.value !== 'custom') {
+                            unsupportedFonts.add(realName);
+                        }
+                    } catch (e) {
+                        console.error("Failed to get font info for", fontId, e);
+                    }
                 }
             }
             console.log("Font check complete, unsupported:", Array.from(unsupportedFonts));
@@ -241,8 +224,9 @@ textLayerDiv.addEventListener('mouseup', (e) => {
                         intersectingItem = item;
                         detectedItemIndex = index;
                         
-                        // Extract standard font name synchronously if possible, or trigger it
-                        page.objs.get(detectedFont, (fontObj) => {
+                        // Extract standard font name synchronously
+                        try {
+                            const fontObj = page.commonObjs.get(detectedFont);
                             let fName = (fontObj && fontObj.name) ? fontObj.name : detectedFont;
                             let realName = fName.includes('+') ? fName.split('+')[1] : fName;
                             
@@ -253,7 +237,9 @@ textLayerDiv.addEventListener('mouseup', (e) => {
                             if (STANDARD_FONTS.includes(realName)) {
                                 detectedFontFamily = realName;
                             }
-                        });
+                        } catch (e) {
+                            console.error("Could not get font name in mouseup:", e);
+                        }
                     } else if (detectedFont !== item.fontName || detectedColor !== itemColorStr) {
                         alert("Error: You cannot highlight text that spans multiple fonts or colors.");
                         window.getSelection().removeAllRanges();
