@@ -19,10 +19,13 @@ const paginationControls = document.getElementById('pagination-controls');
 // Popup Elements
 const popup = document.getElementById('edit-popup');
 const editInput = document.getElementById('edit-input');
+const fontSelect = document.getElementById('edit-font');
+const customFontUpload = document.getElementById('custom-font-upload');
 const saveBtn = document.getElementById('save-edit-btn');
 const cancelBtn = document.getElementById('cancel-edit-btn');
 
 let currentEditContext = null;
+let customFontBytes = null;
 let fontCache = {}; // Cache loaded standard fonts
 
 // Handle file upload
@@ -139,6 +142,22 @@ function showPopup(x, y, selectedItems, combinedStr) {
     editInput.focus();
 }
 
+fontSelect.addEventListener('change', (e) => {
+    if (e.target.value === 'custom') {
+        customFontUpload.click();
+    }
+});
+
+customFontUpload.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        customFontBytes = await file.arrayBuffer();
+        alert("Custom font loaded successfully!");
+    } else {
+        fontSelect.value = 'Helvetica'; // Reset if cancelled
+    }
+});
+
 cancelBtn.addEventListener('click', () => {
     popup.classList.add('hidden');
     currentEditContext = null;
@@ -154,11 +173,17 @@ saveBtn.addEventListener('click', () => {
         return;
     }
 
+    if (fontSelect.value === 'custom' && !customFontBytes) {
+        alert("Please upload a custom font file first, or select a standard font.");
+        return;
+    }
+
     modifications.push({
         pageIndex: currentPage - 1, 
         items: currentEditContext.selectedItems,
         newText: newText.padEnd(currentEditContext.originalStr.length, ' '), 
-        styles: pageTextContent.styles
+        fontChoice: fontSelect.value,
+        customFontBytes: fontSelect.value === 'custom' ? customFontBytes : null
     });
     
     // Visually update the spans
@@ -173,19 +198,18 @@ saveBtn.addEventListener('click', () => {
     alert("Edit saved. Click 'Download Modified PDF' when done.");
 });
 
-async function getStandardFont(pdfDoc, fontName, styles) {
-    const style = styles[fontName];
-    let fontEnum = PDFLib.StandardFonts.Helvetica; // default
-    
-    if (style && style.fontFamily) {
-        const family = style.fontFamily.toLowerCase();
-        if (family.includes('times') || family.includes('serif')) {
-            fontEnum = PDFLib.StandardFonts.TimesRoman;
-        } else if (family.includes('courier') || family.includes('mono')) {
-            fontEnum = PDFLib.StandardFonts.Courier;
+async function getFontForMod(pdfDoc, mod) {
+    if (mod.fontChoice === 'custom' && mod.customFontBytes) {
+        // Register fontkit if it hasn't been already
+        if (!pdfDoc.isFontkitRegistered) {
+            pdfDoc.registerFontkit(fontkit);
+            pdfDoc.isFontkitRegistered = true;
         }
+        return await pdfDoc.embedFont(mod.customFontBytes);
     }
     
+    // Otherwise it's a standard font
+    const fontEnum = mod.fontChoice; // e.g. "Helvetica"
     if (!fontCache[fontEnum]) {
         fontCache[fontEnum] = await pdfDoc.embedFont(fontEnum);
     }
@@ -211,8 +235,8 @@ downloadBtn.addEventListener('click', async () => {
             const tx = firstItem.transform;
             const fontSize = Math.sqrt(tx[2] * tx[2] + tx[3] * tx[3]);
             
-            // Determine font dynamically
-            const font = await getStandardFont(pdfDoc, firstItem.fontName, mod.styles);
+            // Determine font based on user selection
+            const font = await getFontForMod(pdfDoc, mod);
 
             let totalWidth = 0;
             // Draw white redaction rectangles over ALL original text parts

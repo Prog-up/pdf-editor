@@ -41,6 +41,18 @@
     <div id="edit-popup" class="hidden">
         <div class="popup-header">Edit Text (Same length)</div>
         <input type="text" id="edit-input" autocomplete="off">
+        
+        <select id="edit-font">
+            <option value="Helvetica">Helvetica</option>
+            <option value="Helvetica-Bold">Helvetica Bold</option>
+            <option value="Times-Roman">Times Roman</option>
+            <option value="Times-Bold">Times Bold</option>
+            <option value="Courier">Courier</option>
+            <option value="Courier-Bold">Courier Bold</option>
+            <option value="custom">Upload Custom Font (.ttf)...</option>
+        </select>
+        <input type="file" id="custom-font-upload" accept=".ttf,.otf" style="display:none">
+
         <div class="popup-actions">
             <button id="save-edit-btn">Save</button>
             <button id="cancel-edit-btn">Cancel</button>
