@@ -17,11 +17,11 @@ def test_pdf_editor():
         page.wait_for_load_state('networkidle')
         
         print("Uploading dummy PDF...")
-        file_input = page.locator('#file-upload')
-        file_input.set_input_files('dummy.pdf')
+        # Upload dummy PDF
+        page.locator('#file-upload').set_input_files('dummy_standard.pdf')
         
-        # Wait for canvas to render
-        page.wait_for_selector('canvas#pdf-canvas', state='visible')
+        # Wait for text layer to render
+        page.wait_for_selector('.textLayer > span', state='visible')
         page.wait_for_selector('.textLayer > span', state='visible')
         
         print("Selecting text...")

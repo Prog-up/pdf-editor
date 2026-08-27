@@ -28,22 +28,98 @@ let currentEditContext = null;
 let customFontBytes = null;
 let fontCache = {}; // Cache loaded standard fonts
 
+const STANDARD_FONTS = [
+    'Times-Roman', 'Times-Bold', 'Times-Italic', 'Times-BoldItalic',
+    'Helvetica', 'Helvetica-Bold', 'Helvetica-Oblique', 'Helvetica-BoldOblique',
+    'Courier', 'Courier-Bold', 'Courier-Oblique', 'Courier-BoldOblique',
+    'Symbol', 'ZapfDingbats'
+];
+
 // Handle file upload
 fileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
-    if (file) {
-        pdfBytes = await file.arrayBuffer();
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+        const buffer = event.target.result;
+        const typedArray = new Uint8Array(buffer);
         
-        const pdfJsBuffer = pdfBytes.slice(0);
-        const typedArray = new Uint8Array(pdfJsBuffer);
-        
-        pdfDocument = await pdfjsLib.getDocument(typedArray).promise;
+        // Scan for unsupported fonts
+        try {
+            console.log("Loading temp doc...");
+            const tempDoc = await pdfjsLib.getDocument(typedArray.slice(0)).promise;
+            console.log("Temp doc loaded, pages:", tempDoc.numPages);
+            const unsupportedFonts = new Set();
+            
+            for (let i = 1; i <= tempDoc.numPages; i++) {
+                const tempPage = await tempDoc.getPage(i);
+                const textContent = await tempPage.getTextContent();
+                
+                const fontIds = new Set();
+                for (const item of textContent.items) {
+                    if (item.str.trim() !== '') fontIds.add(item.fontName);
+                }
+                
+                for (const fontId of fontIds) {
+                    await new Promise((resolve) => {
+                        let resolved = false;
+                        const timeout = setTimeout(() => {
+                            if (!resolved) {
+                                resolved = true;
+                                resolve();
+                            }
+                        }, 500); // 500ms timeout
+                        
+                        try {
+                            tempPage.objs.get(fontId, (font) => {
+                                if (resolved) return;
+                                resolved = true;
+                                clearTimeout(timeout);
+                                let fName = (font && font.name) ? font.name : fontId;
+                                const realName = fName.includes('+') ? fName.split('+')[1] : fName;
+                                if (!STANDARD_FONTS.includes(realName) && fontSelect.value !== 'custom') {
+                                    unsupportedFonts.add(realName);
+                                }
+                                resolve();
+                            });
+                        } catch (e) {
+                            if (!resolved) {
+                                resolved = true;
+                                clearTimeout(timeout);
+                                resolve();
+                            }
+                        }
+                    });
+                }
+            }
+            console.log("Font check complete, unsupported:", Array.from(unsupportedFonts));
+            
+            if (unsupportedFonts.size > 0) {
+                alert("Error: This PDF contains unsupported fonts: " + Array.from(unsupportedFonts).join(', ') + ".\nOnly standard PDF fonts are supported unless you upload a custom font first.");
+                fileInput.value = '';
+                return; // Stop loading
+            }
+        } catch (err) {
+            console.error("Font scan failed:", err);
+        }
+
+        console.log("Proceeding to render...");
+        // Font check passed, proceed to load
+        pdfBytes = typedArray;
+        pdfDocument = await pdfjsLib.getDocument(typedArray.slice(0)).promise;
         downloadBtn.disabled = false;
         paginationControls.style.display = 'flex';
         
+        // Hide the manual font selector if they didn't explicitly choose custom!
+        if (fontSelect.value !== 'custom') {
+            fontSelect.style.display = 'none';
+        }
+        
         currentPage = 1;
         renderPage(currentPage);
-    }
+    };
+    reader.readAsArrayBuffer(file);
 });
 
 prevPageBtn.addEventListener('click', () => {
@@ -259,7 +335,7 @@ async function getFontForMod(pdfDoc, mod) {
     }
     
     // Otherwise it's a standard font
-    const fontEnum = mod.fontChoice; // e.g. "Helvetica"
+    const fontEnum = mod.autoFont || mod.fontChoice; // Use auto detected font if available
     if (!fontCache[fontEnum]) {
         fontCache[fontEnum] = await pdfDoc.embedFont(fontEnum);
     }
