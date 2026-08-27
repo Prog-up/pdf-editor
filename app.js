@@ -421,9 +421,7 @@ downloadBtn.addEventListener('click', async () => {
             
             // Recompute PDF width based on the visual box
             const pdfWidth = mod.relRect.width / currentScale;
-            const pdfHeight = mod.relRect.height / currentScale;
             const pdfX = mod.relRect.left / currentScale;
-            const pdfY = viewport.height - (mod.relRect.bottom / currentScale);
             
             // The baseline Y in PDF coordinates is tx[5].
             const baselineY = tx[5];
