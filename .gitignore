@@ -3,7 +3,6 @@ venv/
 __pycache__/
 *.pdf
 !dummy_standard.pdf
-!Attestation*.pdf
 *.png
 *.log
 *.aux
