@@ -76,6 +76,7 @@ async function renderPage(pageNum) {
     textLayerDiv.innerHTML = ''; 
     textLayerDiv.style.width = `${viewport.width}px`;
     textLayerDiv.style.height = `${viewport.height}px`;
+    textLayerDiv.style.setProperty('--scale-factor', viewport.scale);
 
     pageTextContent = await page.getTextContent();
     
