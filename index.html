@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF Text Editor</title>
+    <title>Éditeur de texte PDF</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css">
     <!-- pdf.js for rendering and text selection -->
@@ -17,24 +17,24 @@
 <body>
         <div class="toolbar">
         <div class="toolbar-section">
-            <button id="browse-btn">Browse PDF</button>
+            <button id="browse-btn">Ouvrir un PDF</button>
             <input type="file" id="file-upload" accept="application/pdf" style="display: none;">
             
-            <button id="add-font-btn">Add Font (.ttf)</button>
+            <button id="add-font-btn">Ajouter une police (.ttf)</button>
             <input type="file" id="add-font-upload" accept=".ttf" style="display: none;">
             
-            <button id="download-btn" disabled>Download Modified PDF</button>
+            <button id="download-btn" disabled>Télécharger le PDF modifié</button>
         </div>
         
         <div class="toolbar-section toolbar-center" id="pagination-controls" style="visibility: hidden;">
-            <button id="prev-page-btn">Previous</button>
+            <button id="prev-page-btn">Précédent</button>
             <span id="page-info">Page 1</span>
-            <button id="next-page-btn">Next</button>
+            <button id="next-page-btn">Suivant</button>
         </div>
 
         <div class="toolbar-section toolbar-right" id="edit-controls" style="visibility: hidden;">
-            <input type="text" id="edit-input" autocomplete="off" placeholder="Select text to edit...">
-            <button id="save-edit-btn">Save</button>
+            <input type="text" id="edit-input" autocomplete="off" placeholder="Sélectionnez le texte à modifier...">
+            <button id="save-edit-btn">Sauvegarder</button>
         </div>
     </div>
 

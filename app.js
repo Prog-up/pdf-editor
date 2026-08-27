@@ -108,7 +108,7 @@ fileInput.addEventListener('change', async (e) => {
             console.log("Font check complete, unsupported:", Array.from(unsupportedFonts));
             
             if (unsupportedFonts.size > 0) {
-                alert("Error: This PDF contains unsupported fonts: " + Array.from(unsupportedFonts).join(', ') + ".\nOnly standard PDF fonts are supported unless you upload a custom font first.");
+                alert("Ce PDF contient des polices propriétaires non prises en charge : " + Array.from(unsupportedFonts).join(', ') + ".\nPour une correspondance visuelle parfaite, veuillez d'abord ajouter les fichiers .ttf correspondants via le bouton Ajouter une police.");
                 fileInput.value = '';
                 return; // Stop loading
             }
@@ -147,7 +147,7 @@ nextPageBtn.addEventListener('click', () => {
 
 async function renderPage(pageNum) {
     const page = await pdfDocument.getPage(pageNum);
-    pageInfo.textContent = `Page ${pageNum} of ${pdfDocument.numPages}`;
+    pageInfo.textContent = `Page ${pageNum} sur ${pdfDocument.numPages}`;
     
     const viewport = page.getViewport({ scale: currentScale });
     canvas.height = viewport.height;
@@ -302,7 +302,7 @@ saveBtn.addEventListener('click', () => {
     
     const newText = editInput.value;
     if (newText.length > currentEditContext.originalStr.length) {
-        alert("Text must be the same length or shorter!");
+        alert("Le texte doit être de la même longueur ou plus court !");
         return;
     }
 
@@ -391,7 +391,7 @@ downloadBtn.addEventListener('click', async () => {
 
     try {
         downloadBtn.disabled = true;
-        downloadBtn.textContent = 'Processing...';
+        downloadBtn.textContent = 'Traitement en cours...';
 
         const typedArray = new Uint8Array(pdfBytes);
         const pdfDoc = await PDFLib.PDFDocument.load(typedArray);
@@ -473,10 +473,10 @@ downloadBtn.addEventListener('click', async () => {
         URL.revokeObjectURL(url);
     } catch (err) {
         console.error(err);
-        alert("An error occurred during download: " + err.message);
+        alert("Une erreur s'est produite lors du téléchargement : " + err.message);
     } finally {
         downloadBtn.disabled = false;
-        downloadBtn.textContent = 'Download Modified PDF';
+        downloadBtn.textContent = 'Télécharger le PDF modifié';
     }
 });
 
@@ -496,10 +496,10 @@ addFontUpload.addEventListener('change', async (e) => {
             // Add a stripped name for standard matching
             let strippedName = fontName.includes('+') ? fontName.split('+')[1] : fontName;
             USER_FONTS[strippedName] = buffer;
-            alert(`Added font: ${fontName}`);
+            alert(`Police ajoutée : ${fontName}`);
         } catch (err) {
             console.error(err);
-            alert("Failed to load font. Make sure it is a valid TTF/OTF file.");
+            alert("Échec du chargement de la police. Assurez-vous qu'il s'agit d'un fichier TTF/OTF valide.");
         }
     }
     addFontUpload.value = ''; // Reset
