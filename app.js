@@ -43,12 +43,12 @@ const SERVER_FONTS = {
     'Arial,Italic': 'fonts/Arial-Italic.ttf',
     'Arial,BoldItalic': 'fonts/Arial-BoldItalic.ttf',
     'ArialNarrow': 'fonts/ArialNarrow.ttf',
-    'ArialNarrow-Bold': 'fonts/ArialNarrow.ttf', // Fallback to regular narrow since we don't have bold narrow
-    'ArialNarrow-Italic': 'fonts/ArialNarrow.ttf',
-    'ArialNarrow-BoldItalic': 'fonts/ArialNarrow.ttf',
-    'ArialNarrow,Bold': 'fonts/ArialNarrow.ttf',
-    'ArialNarrow,Italic': 'fonts/ArialNarrow.ttf',
-    'ArialNarrow,BoldItalic': 'fonts/ArialNarrow.ttf',
+    'ArialNarrow-Bold': 'fonts/Arial-Bold.ttf', // Fallback to Arial-Bold (will be horizontally compressed by Tz to look narrow)
+    'ArialNarrow-Italic': 'fonts/Arial-Italic.ttf',
+    'ArialNarrow-BoldItalic': 'fonts/Arial-BoldItalic.ttf',
+    'ArialNarrow,Bold': 'fonts/Arial-Bold.ttf',
+    'ArialNarrow,Italic': 'fonts/Arial-Italic.ttf',
+    'ArialNarrow,BoldItalic': 'fonts/Arial-BoldItalic.ttf',
     'TimesNewRoman': 'fonts/TimesNewRoman.ttf',
     'TimesNewRomanPSMT': 'fonts/TimesNewRoman.ttf',
     'TimesNewRoman,Bold': 'fonts/TimesNewRoman-Bold.ttf',
@@ -181,7 +181,7 @@ async function renderPage(pageNum) {
 }
 
 textLayerDiv.addEventListener('mouseup', (e) => {
-    setTimeout(() => {
+    setTimeout(async () => {
         const selection = window.getSelection();
         if (selection.isCollapsed || selection.rangeCount === 0) return;
         
@@ -198,59 +198,11 @@ textLayerDiv.addEventListener('mouseup', (e) => {
             totalRect.right = Math.max(totalRect.right, rect.right);
             totalRect.bottom = Math.max(totalRect.bottom, rect.bottom);
         }
-
-        // Find the first pdf.js span that intersects this box to get font metadata
-        const spans = Array.from(textLayerDiv.querySelectorAll('span[data-item-index]'));
-        let intersectingItem = null;
-        let detectedFont = null;
-        let detectedColor = null;
-        let detectedFontFamily = 'Helvetica'; // Fallback
-        let detectedItemIndex = -1;
-
-        for (const span of spans) {
-            const spanRect = span.getBoundingClientRect();
-            // Check for intersection with the visual bounding box
-            if (!(spanRect.right < totalRect.left || spanRect.left > totalRect.right || 
-                  spanRect.bottom < totalRect.top || spanRect.top > totalRect.bottom)) {
-                
-                const index = parseInt(span.dataset.itemIndex);
-                const item = pageTextContent.items[index];
-                
-                // We skip pure spaces when doing font/color checks because they often lack color/font properties
-                if (item.str.trim() !== '') {
-                    const itemColorStr = item.color ? item.color.join(',') : '0,0,0';
-                    
-                    if (!detectedFont) {
-                        detectedFont = item.fontName;
-                        detectedColor = itemColorStr;
-                        intersectingItem = item;
-                        detectedItemIndex = index;
-                        
-                        // Extract standard font name synchronously
-                        try {
-                            const fontObj = page.commonObjs.get(detectedFont);
-                            let fName = (fontObj && fontObj.name) ? fontObj.name : detectedFont;
-                            let realName = fName.includes('+') ? fName.split('+')[1] : fName;
-                            
-                            if (STANDARD_FONTS.includes(realName) || SERVER_FONTS[realName]) {
-                                detectedFontFamily = realName;
-                            }
-                        } catch (e) {
-                            console.error("Could not get font name in mouseup:", e);
-                        }
-                    } else if (detectedFont !== item.fontName || detectedColor !== itemColorStr) {
-                        alert("Error: You cannot highlight text that spans multiple fonts or colors.");
-                        window.getSelection().removeAllRanges();
-                        return;
-                    }
-                } else if (!intersectingItem) {
-                    intersectingItem = item; // Fallback to space if absolutely nothing else is found
-                    detectedItemIndex = index;
-                }
-            }
-        }
-
-        if (!intersectingItem) return;
+        
+        let pdfPage = null;
+        try { pdfPage = await pdfDocument.getPage(currentPage); } catch(err) { console.error(err); }
+        if (!pdfPage) return;
+        const viewport = pdfPage.getViewport({ scale: currentScale });
 
         // Convert totalRect to relative to the container
         const containerRect = textLayerDiv.getBoundingClientRect();
@@ -260,6 +212,74 @@ textLayerDiv.addEventListener('mouseup', (e) => {
             width: totalRect.right - totalRect.left,
             height: totalRect.bottom - totalRect.top
         };
+
+        // Find the pdf.js item that intersects this box with the maximum overlap area
+        let bestItem = null;
+        let maxArea = 0;
+        let bestIndex = -1;
+
+        for (let i = 0; i < pageTextContent.items.length; i++) {
+            const item = pageTextContent.items[i];
+            if (item.str.trim() === '') continue;
+
+            const tx = item.transform;
+            const itemX = tx[4] * currentScale;
+            // PDF coordinates are bottom-up, we convert to top-down relative to the container
+            // The font size/height is roughly tx[3] (or tx[0])
+            const fontSize = Math.sqrt((tx[2] * tx[2]) + (tx[3] * tx[3]));
+            const itemHeight = fontSize * currentScale;
+            // tx[5] is the baseline. The top of the text is roughly baselineY + height
+            const itemY = viewport.height - (tx[5] * currentScale) - itemHeight;
+            const itemWidth = item.width * currentScale;
+            
+            // Calculate intersection rectangle
+            const interLeft = Math.max(itemX, relRect.left);
+            const interTop = Math.max(itemY, relRect.top);
+            const interRight = Math.min(itemX + itemWidth, relRect.left + relRect.width);
+            const interBottom = Math.min(itemY + itemHeight, relRect.top + relRect.height);
+            
+            if (interRight > interLeft && interBottom > interTop) {
+                const area = (interRight - interLeft) * (interBottom - interTop);
+                if (area > maxArea) {
+                    maxArea = area;
+                    bestIndex = i;
+                    bestItem = item;
+                }
+            }
+        }
+
+        let intersectingItem = null;
+        let detectedFont = null;
+        let detectedColor = null;
+        let detectedFontFamily = 'Helvetica'; // Fallback
+        let detectedItemIndex = -1;
+        
+        if (bestItem) {
+            intersectingItem = bestItem;
+            detectedItemIndex = bestIndex;
+            detectedFont = bestItem.fontName;
+            detectedColor = bestItem.color ? bestItem.color.join(',') : '0,0,0';
+            
+            // Extract standard font name synchronously
+            try {
+                const fontObj = pdfPage ? pdfPage.commonObjs.get(detectedFont) : null;
+                let fName = (fontObj && fontObj.name) ? fontObj.name : detectedFont;
+                let realName = fName.includes('+') ? fName.split('+')[1] : fName;
+                
+                if (STANDARD_FONTS.includes(realName) || SERVER_FONTS[realName]) {
+                    detectedFontFamily = realName;
+                }
+            } catch (e) {
+                console.error("Could not get font name in mouseup:", e);
+            }
+        }
+
+        if (!intersectingItem) {
+            console.log("No intersecting item found. totalRect:", totalRect);
+            return;
+        }
+        console.log("Found intersecting item:", intersectingItem.str);
+
 
         showPopup(relRect.left + 10, relRect.top + 10, intersectingItem, selectedText, relRect, detectedFontFamily, detectedItemIndex);
     }, 10);
@@ -277,6 +297,7 @@ function showPopup(x, y, item, selectedText, relRect, autoFont, itemIndex) {
     
     editInput.style.width = `${Math.max(100, relRect.width)}px`;
     editInput.focus();
+    console.log("Popup shown");
 }
 
 fontSelect.addEventListener('change', (e) => {
@@ -407,10 +428,6 @@ downloadBtn.addEventListener('click', async () => {
         fontCache = {}; // Reset cache for new doc
 
         for (const mod of modifications) {
-            // If the user replaced a string with the exact same string, do not apply any visual changes.
-            if (mod.newText === mod.originalStr) {
-                continue;
-            }
 
             const page = pages[mod.pageIndex];
             
@@ -428,10 +445,13 @@ downloadBtn.addEventListener('click', async () => {
 
             // Calculate true PDF width of the replaced text
             let truePdfWidth = pdfWidth;
-            if (mod.originalStr.trim() === item.str.trim()) {
-                truePdfWidth = item.width;
-            } else {
-                truePdfWidth = item.width * (mod.originalStr.length / item.str.length);
+            if (item && typeof item.width === 'number') {
+                if (item.str.length > 0) {
+                    truePdfWidth = item.width * (mod.originalStr.length / item.str.length);
+                }
+            }
+            if (isNaN(truePdfWidth) || truePdfWidth === undefined) {
+                truePdfWidth = pdfWidth;
             }
 
             // Draw white redaction rectangle EXACTLY over the highlight box
@@ -449,7 +469,7 @@ downloadBtn.addEventListener('click', async () => {
             const fontColor = PDFLib.rgb(mod.colorArray[0]/255, mod.colorArray[1]/255, mod.colorArray[2]/255);
             
             // Only scale down (compress), never scale up. Limit compression to 60% to remain readable.
-            if (textWidth > truePdfWidth) {
+            if (textWidth > truePdfWidth && textWidth > 0) {
                 scaleFactor = Math.max((truePdfWidth / textWidth) * 100, 60);
             }
             
