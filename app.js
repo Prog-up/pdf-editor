@@ -96,50 +96,61 @@ async function renderPage(pageNum) {
 textLayerDiv.addEventListener('mouseup', (e) => {
     setTimeout(() => {
         const selection = window.getSelection();
-        if (!selection.isCollapsed && selection.rangeCount > 0) {
-            const spans = Array.from(textLayerDiv.querySelectorAll('span[data-item-index]'));
-            const selectedSpans = spans.filter(span => selection.containsNode(span, true));
-            
-            if (selectedSpans.length === 0) return;
-            
-            const selectedItems = selectedSpans.map(span => {
-                const index = parseInt(span.dataset.itemIndex);
-                return { span, item: pageTextContent.items[index], index };
-            });
-            
-            const fontNames = new Set(selectedItems.map(x => x.item.fontName));
-            if (fontNames.size > 1) {
-                alert("Error: You have highlighted text containing multiple different fonts. Please select text with a single font.");
-                window.getSelection().removeAllRanges();
-                return;
-            }
-            
-            const combinedStr = selectedItems.map(x => x.item.str).join('');
-            const rect = selectedSpans[0].getBoundingClientRect();
-            const containerRect = textLayerDiv.getBoundingClientRect();
-            
-            showPopup(
-                rect.left - containerRect.left + 10,
-                rect.top - containerRect.top + 10,
-                selectedItems,
-                combinedStr
-            );
+        if (selection.isCollapsed || selection.rangeCount === 0) return;
+        
+        const range = selection.getRangeAt(0);
+        const selectedText = selection.toString().replace(/\n/g, ' '); // normalize newlines
+        if (!selectedText.trim()) return;
+
+        // Get the visual bounding box of the highlighted text
+        let totalRect = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
+        for (const rect of range.getClientRects()) {
+            if (rect.width === 0 || rect.height === 0) continue;
+            totalRect.left = Math.min(totalRect.left, rect.left);
+            totalRect.top = Math.min(totalRect.top, rect.top);
+            totalRect.right = Math.max(totalRect.right, rect.right);
+            totalRect.bottom = Math.max(totalRect.bottom, rect.bottom);
         }
+
+        // Find the first pdf.js span that intersects this box to get font metadata
+        const spans = Array.from(textLayerDiv.querySelectorAll('span[data-item-index]'));
+        let intersectingItem = null;
+        for (const span of spans) {
+            const spanRect = span.getBoundingClientRect();
+            if (!(spanRect.right < totalRect.left || spanRect.left > totalRect.right || 
+                  spanRect.bottom < totalRect.top || spanRect.top > totalRect.bottom)) {
+                const index = parseInt(span.dataset.itemIndex);
+                intersectingItem = pageTextContent.items[index];
+                break;
+            }
+        }
+
+        if (!intersectingItem) return;
+
+        // Convert totalRect to relative to the container
+        const containerRect = textLayerDiv.getBoundingClientRect();
+        const relRect = {
+            left: totalRect.left - containerRect.left,
+            top: totalRect.top - containerRect.top,
+            width: totalRect.right - totalRect.left,
+            height: totalRect.bottom - totalRect.top
+        };
+
+        showPopup(relRect.left + 10, relRect.top + 10, intersectingItem, selectedText, relRect);
     }, 10);
 });
 
-function showPopup(x, y, selectedItems, combinedStr) {
-    currentEditContext = { selectedItems, originalStr: combinedStr };
+function showPopup(x, y, item, selectedText, relRect) {
+    currentEditContext = { item, originalStr: selectedText, relRect };
     
     popup.style.left = `${x}px`;
     popup.style.top = `${y + 20}px`;
     popup.classList.remove('hidden');
     
-    editInput.value = combinedStr; 
-    editInput.maxLength = combinedStr.length; 
+    editInput.value = selectedText; 
+    editInput.maxLength = selectedText.length; 
     
-    let totalWidth = selectedItems.reduce((acc, curr) => acc + curr.item.width, 0);
-    editInput.style.width = `${Math.max(100, totalWidth * currentScale)}px`;
+    editInput.style.width = `${Math.max(100, relRect.width)}px`;
     editInput.focus();
 }
 
@@ -181,17 +192,29 @@ saveBtn.addEventListener('click', () => {
 
     modifications.push({
         pageIndex: currentPage - 1, 
-        items: currentEditContext.selectedItems,
+        item: currentEditContext.item,
         newText: newText.padEnd(currentEditContext.originalStr.length, ' '), 
         fontChoice: fontSelect.value,
-        customFontBytes: fontSelect.value === 'custom' ? customFontBytes : null
+        customFontBytes: fontSelect.value === 'custom' ? customFontBytes : null,
+        relRect: currentEditContext.relRect
     });
     
-    // Visually update the spans
-    currentEditContext.selectedItems.forEach((selItem, i) => {
-        if (i === 0) selItem.span.textContent = newText;
-        else selItem.span.textContent = ''; // Hide others
-    });
+    // Visually update the canvas with an overlay so the user sees their edit
+    const overlay = document.createElement('div');
+    overlay.style.position = 'absolute';
+    overlay.style.left = `${currentEditContext.relRect.left}px`;
+    overlay.style.top = `${currentEditContext.relRect.top}px`;
+    overlay.style.width = `${currentEditContext.relRect.width}px`;
+    overlay.style.height = `${currentEditContext.relRect.height}px`;
+    overlay.style.backgroundColor = 'white';
+    overlay.style.color = 'black';
+    overlay.style.zIndex = '5';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'space-between'; // stretch characters
+    overlay.style.fontFamily = 'sans-serif'; // approximate
+    overlay.innerHTML = newText.split('').map(c => `<span>${c === ' ' ? '&nbsp;' : c}</span>`).join('');
+    document.getElementById('pdf-container').appendChild(overlay);
 
     popup.classList.add('hidden');
     currentEditContext = null;
@@ -232,41 +255,38 @@ downloadBtn.addEventListener('click', async () => {
         for (const mod of modifications) {
             const page = pages[mod.pageIndex];
             
-            const firstItem = mod.items[0].item;
-            const tx = firstItem.transform;
+            const item = mod.item;
+            const tx = item.transform;
             const fontSize = Math.sqrt(tx[2] * tx[2] + tx[3] * tx[3]);
             
             // Determine font based on user selection
             const font = await getFontForMod(pdfDoc, mod);
 
-            let totalWidth = 0;
-            // Draw white redaction rectangles over ALL original text parts
-            for (const {item} of mod.items) {
-                const ix = item.transform[4];
-                const iy = item.transform[5];
-                page.drawRectangle({
-                    x: ix,
-                    y: iy - (fontSize * 0.2), 
-                    width: item.width,
-                    height: fontSize * 1.2, 
-                    color: PDFLib.rgb(1, 1, 1), 
-                });
-                totalWidth += item.width;
-            }
-            
-            const startX = tx[4];
-            const startY = tx[5];
+            // Convert relative screen rect to PDF coordinates
+            const pdfX = mod.relRect.left / currentScale;
+            const pdfWidth = mod.relRect.width / currentScale;
+            // The baseline Y in PDF coordinates is tx[5].
+            const baselineY = tx[5];
+
+            // Draw white redaction rectangle EXACTLY over the highlight box
+            page.drawRectangle({
+                x: pdfX,
+                y: baselineY - (fontSize * 0.2), 
+                width: pdfWidth,
+                height: fontSize * 1.2, 
+                color: PDFLib.rgb(1, 1, 1), 
+            });
             
             const textWidth = font.widthOfTextAtSize(mod.newText, fontSize);
-            const extraSpace = totalWidth - textWidth;
+            const extraSpace = pdfWidth - textWidth;
             const charSpacing = mod.newText.length > 1 ? extraSpace / (mod.newText.length - 1) : 0;
 
-            let currentX = startX;
+            let currentX = pdfX;
             for (let i = 0; i < mod.newText.length; i++) {
                 const char = mod.newText[i];
                 page.drawText(char, {
                     x: currentX,
-                    y: startY, 
+                    y: baselineY, 
                     size: fontSize,
                     font: font,
                     color: PDFLib.rgb(0, 0, 0), 
