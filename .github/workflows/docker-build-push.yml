@@ -11,10 +11,17 @@ on:
 jobs:
   build-scan-push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # Required for keyless signing via Sigstore Cosign
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3.5.0
 
       - name: Build Docker image
         run: docker build -t pdf-editor:local .
@@ -36,7 +43,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Tag and Push Docker image
+      - name: Tag, Push, and Sign Docker image
         if: github.event_name != 'pull_request'
         run: |
           IMAGE_NAME="${{ secrets.DOCKERHUB_USERNAME }}/pdf-editor"
@@ -48,3 +55,14 @@ jobs:
           # Push both tags to Docker Hub
           docker push $IMAGE_NAME:latest
           docker push $IMAGE_NAME:${{ github.sha }}
+          
+          # Extract and output the image hash (digest)
+          IMAGE_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_NAME:${{ github.sha }})
+          echo "======================================"
+          echo "Image successfully pushed!"
+          echo "Image Hash (Digest): $IMAGE_DIGEST"
+          echo "======================================"
+          
+          # Sign the image with Sigstore Cosign (Keyless integrity)
+          echo "Generating integrity signature for Docker Hub..."
+          cosign sign --yes $IMAGE_DIGEST
