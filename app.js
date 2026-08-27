@@ -25,7 +25,11 @@ fileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (file) {
         pdfBytes = await file.arrayBuffer();
-        const typedArray = new Uint8Array(pdfBytes);
+        
+        // pdf.js transfers the buffer to its worker, which detaches it. 
+        // We must pass a clone of the buffer to pdf.js so we can still use pdfBytes later.
+        const pdfJsBuffer = pdfBytes.slice(0);
+        const typedArray = new Uint8Array(pdfJsBuffer);
         
         // Load with pdf.js
         pdfDocument = await pdfjsLib.getDocument(typedArray).promise;
