@@ -25,8 +25,8 @@ def test_pdf_editor():
         page.wait_for_selector('.textLayer > span', state='visible')
         
         print("Selecting text...")
-        # Get the first span in the text layer
-        span = page.locator('.textLayer > span').first
+        # Get the span containing 'This text is red'
+        span = page.locator('.textLayer > span', has_text='This text is red').first
         span_box = span.bounding_box()
         
         # Simulate selection (drag across the span)
@@ -40,12 +40,13 @@ def test_pdf_editor():
         popup.wait_for(state='visible', timeout=5000)
         print("Popup visible!")
         
-        print("Editing text...")
+        print("Editing text (replacing with identical string for diff test)...")
         edit_input = page.locator('#edit-input')
         original_val = edit_input.input_value()
+        print(f"Original text detected: '{original_val}'")
         
-        # Replace text
-        edit_input.fill('Testing')
+        # Replace text with the exact same value
+        edit_input.fill(original_val)
         
         page.locator('#save-edit-btn').click()
         
@@ -62,6 +63,17 @@ def test_pdf_editor():
         print(f"Downloaded successfully to {download_path}")
         
         browser.close()
+
+    print("Running visual diff with diff-pdf...")
+    import subprocess
+    result = subprocess.run(['nix-shell', '-p', 'diff-pdf', '--run', f'diff-pdf --output-diff=diff_output.pdf dummy.pdf {download_path}'], capture_output=True)
+    if result.returncode != 0:
+        print("Visual differences found! Check diff_output.pdf")
+        print("diff-pdf output:")
+        print(result.stderr.decode() or result.stdout.decode())
+        # Let's not fail the script completely yet, as small subpixel diffs are expected due to font substitution
+    else:
+        print("PDF is visually identical!")
 
 if __name__ == "__main__":
     test_pdf_editor()

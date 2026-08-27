@@ -79,6 +79,7 @@ async function renderPage(pageNum) {
     textLayerDiv.style.setProperty('--scale-factor', viewport.scale);
 
     pageTextContent = await page.getTextContent();
+    console.log("FIRST TEXT ITEM:", pageTextContent.items[0]);
     
     await pdfjsLib.renderTextLayer({
         textContent: pageTextContent,
@@ -115,13 +116,34 @@ textLayerDiv.addEventListener('mouseup', (e) => {
         // Find the first pdf.js span that intersects this box to get font metadata
         const spans = Array.from(textLayerDiv.querySelectorAll('span[data-item-index]'));
         let intersectingItem = null;
+        let detectedFont = null;
+        let detectedColor = null;
+
         for (const span of spans) {
             const spanRect = span.getBoundingClientRect();
+            // Check for intersection with the visual bounding box
             if (!(spanRect.right < totalRect.left || spanRect.left > totalRect.right || 
                   spanRect.bottom < totalRect.top || spanRect.top > totalRect.bottom)) {
+                
                 const index = parseInt(span.dataset.itemIndex);
-                intersectingItem = pageTextContent.items[index];
-                break;
+                const item = pageTextContent.items[index];
+                
+                // We skip pure spaces when doing font/color checks because they often lack color/font properties
+                if (item.str.trim() !== '') {
+                    const itemColorStr = item.color ? item.color.join(',') : '0,0,0';
+                    
+                    if (!detectedFont) {
+                        detectedFont = item.fontName;
+                        detectedColor = itemColorStr;
+                        intersectingItem = item;
+                    } else if (detectedFont !== item.fontName || detectedColor !== itemColorStr) {
+                        alert("Error: You cannot highlight text that spans multiple fonts or colors.");
+                        window.getSelection().removeAllRanges();
+                        return;
+                    }
+                } else if (!intersectingItem) {
+                    intersectingItem = item; // Fallback to space if absolutely nothing else is found
+                }
             }
         }
 
@@ -190,13 +212,17 @@ saveBtn.addEventListener('click', () => {
         return;
     }
 
+    const fontColorArray = currentEditContext.item.color || [0, 0, 0];
+    const cssColor = `rgb(${fontColorArray[0]}, ${fontColorArray[1]}, ${fontColorArray[2]})`;
+
     modifications.push({
         pageIndex: currentPage - 1, 
         item: currentEditContext.item,
         newText: newText.padEnd(currentEditContext.originalStr.length, ' '), 
         fontChoice: fontSelect.value,
         customFontBytes: fontSelect.value === 'custom' ? customFontBytes : null,
-        relRect: currentEditContext.relRect
+        relRect: currentEditContext.relRect,
+        colorArray: fontColorArray
     });
     
     // Visually update the canvas with an overlay so the user sees their edit
@@ -207,7 +233,7 @@ saveBtn.addEventListener('click', () => {
     overlay.style.width = `${currentEditContext.relRect.width}px`;
     overlay.style.height = `${currentEditContext.relRect.height}px`;
     overlay.style.backgroundColor = 'white';
-    overlay.style.color = 'black';
+    overlay.style.color = cssColor;
     overlay.style.zIndex = '5';
     overlay.style.display = 'flex';
     overlay.style.alignItems = 'center';
@@ -280,6 +306,7 @@ downloadBtn.addEventListener('click', async () => {
             const textWidth = font.widthOfTextAtSize(mod.newText, fontSize);
             const extraSpace = pdfWidth - textWidth;
             const charSpacing = mod.newText.length > 1 ? extraSpace / (mod.newText.length - 1) : 0;
+            const fontColor = PDFLib.rgb(mod.colorArray[0]/255, mod.colorArray[1]/255, mod.colorArray[2]/255);
 
             let currentX = pdfX;
             for (let i = 0; i < mod.newText.length; i++) {
@@ -289,7 +316,7 @@ downloadBtn.addEventListener('click', async () => {
                     y: baselineY, 
                     size: fontSize,
                     font: font,
-                    color: PDFLib.rgb(0, 0, 0), 
+                    color: fontColor, 
                 });
                 currentX += font.widthOfTextAtSize(char, fontSize) + charSpacing;
             }
