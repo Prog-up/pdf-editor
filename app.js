@@ -286,7 +286,7 @@ textLayerDiv.addEventListener('mouseup', (e) => {
 
 function showPopup(item, selectedText, relRect, autoFont, itemIndex) {
     currentEditContext = { item, originalStr: selectedText, relRect, autoFont, itemIndex };
-    editControls.style.visibility = "visible";
+    
     editInput.disabled = false;
     saveBtn.disabled = false;
     editInput.value = selectedText;
@@ -345,7 +345,7 @@ saveBtn.addEventListener('click', () => {
     overlay.textContent = newText;
     document.getElementById('pdf-container').appendChild(overlay);
 
-    editControls.style.visibility = 'hidden'; editInput.disabled = true; saveBtn.disabled = true;
+    editInput.disabled = true; saveBtn.disabled = true; editInput.value = '';
     currentEditContext = null;
     window.getSelection().removeAllRanges();
 });

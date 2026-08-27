@@ -36,7 +36,7 @@ def test_pdf_editor():
         page.mouse.up()
         
         # Check if popup appears
-        popup = page.locator('#edit-controls')
+        popup = page.locator('#edit-input:not([disabled])')
         popup.wait_for(state='visible', timeout=5000)
         print("Popup visible!")
         

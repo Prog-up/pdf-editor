@@ -45,7 +45,7 @@ def test_attestation():
             element.dispatchEvent(event);
         }""")
         
-        page.wait_for_selector('#edit-controls', state='visible', timeout=10000)
+        page.wait_for_selector('#edit-input:not([disabled])', state='attached', timeout=10000)
         print("Replacing with identical text for diff-pdf test...")
         page.locator('#edit-input').fill("1 771,28")
         

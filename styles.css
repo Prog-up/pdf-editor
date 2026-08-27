@@ -76,3 +76,9 @@ button:disabled {
 #save-edit-btn:hover {
     background-color: #0056b3;
 }
+
+#edit-input:disabled {
+    background-color: #e9ecef;
+    border-color: #ccc;
+    cursor: not-allowed;
+}
