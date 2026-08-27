@@ -22,32 +22,16 @@ body {
     margin: 20px auto;
     box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     background-color: white;
-    /* We'll set dimensions dynamically */
+/* Ensure canvas is underneath */
+#pdf-canvas {
+    display: block;
+    direction: ltr;
 }
 
-/* pdf.js text layer required styles */
+/* pdf.js text layer required overrides if needed */
 .textLayer {
-    position: absolute;
-    left: 0;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    overflow: hidden;
+    z-index: 10;
     opacity: 0.2; /* Set to > 0 for debugging, usually 0 */
-    line-height: 1.0;
-}
-
-.textLayer > span {
-    color: transparent;
-    position: absolute;
-    white-space: pre;
-    cursor: text;
-    transform-origin: 0% 0%;
-}
-
-.textLayer ::selection {
-    background: rgba(0, 0, 255, 0.3);
-    color: transparent;
 }
 
 /* Edit Popup styling */

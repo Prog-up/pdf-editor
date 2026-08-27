@@ -81,22 +81,27 @@ document.addEventListener('selectionchange', () => {
 });
 
 textLayerDiv.addEventListener('mouseup', (e) => {
-    const selection = window.getSelection();
-    if (!selection.isCollapsed && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        const selectedText = selection.toString();
-        
-        // Find which span was selected
-        // Note: For simplicity, this assumes selection is within a single text item span
-        const startNode = range.startContainer.parentNode;
-        if (startNode && startNode.dataset && startNode.dataset.itemIndex) {
-            const itemIndex = parseInt(startNode.dataset.itemIndex);
-            const item = pageTextContent.items[itemIndex];
+    // Small timeout to allow selection to register
+    setTimeout(() => {
+        const selection = window.getSelection();
+        if (!selection.isCollapsed && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0);
+            const selectedText = selection.toString();
             
-            // Show popup
-            showPopup(e.pageX, e.pageY, item, itemIndex, selectedText);
+            let startNode = range.startContainer;
+            if (startNode.nodeType === Node.TEXT_NODE) {
+                startNode = startNode.parentNode;
+            }
+            
+            const itemSpan = startNode.closest('span[data-item-index]');
+            if (itemSpan) {
+                const itemIndex = parseInt(itemSpan.dataset.itemIndex);
+                const item = pageTextContent.items[itemIndex];
+                
+                showPopup(e.pageX, e.pageY, item, itemIndex, selectedText);
+            }
         }
-    }
+    }, 10);
 });
 
 function showPopup(x, y, textItem, itemIndex, selectedStr) {
@@ -156,74 +161,76 @@ saveBtn.addEventListener('click', () => {
 downloadBtn.addEventListener('click', async () => {
     if (!pdfBytes) return;
 
-    // Load into pdf-lib
-    const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
-    const pages = pdfDoc.getPages();
-    
-    // Embed a standard font (Helvetica)
-    const helveticaFont = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+    try {
+        downloadBtn.disabled = true;
+        downloadBtn.textContent = 'Processing...';
 
-    // Apply modifications
-    for (const mod of modifications) {
-        const page = pages[mod.pageIndex];
-        const item = mod.item;
+        // Load into pdf-lib
+        const typedArray = new Uint8Array(pdfBytes);
+        const pdfDoc = await PDFLib.PDFDocument.load(typedArray);
+        const pages = pdfDoc.getPages();
         
-        // Extract properties from pdf.js transform
-        // transform is [scaleX, skewY, skewX, scaleY, translateX, translateY]
-        const tx = item.transform;
-        const fontSize = Math.sqrt(tx[2] * tx[2] + tx[3] * tx[3]); // Or simply tx[3] for unrotated
-        const x = tx[4];
-        const y = tx[5];
-        const width = item.width;
-        // height is roughly the font size
-        const height = fontSize;
+        // Embed a standard font (Helvetica)
+        const helveticaFont = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
 
-        // 1. Draw a white redaction rectangle over the old text
-        // Note: Coordinates in pdf-lib and pdf.js transform are from bottom-left
-        page.drawRectangle({
-            x: x,
-            y: y, // Might need slight offset depending on font baseline
-            width: width,
-            height: height * 1.2, // slightly larger to cover ascenders/descenders
-            color: PDFLib.rgb(1, 1, 1), // White
-        });
+        // Apply modifications
+        for (const mod of modifications) {
+            const page = pages[mod.pageIndex];
+            const item = mod.item;
+            
+            // Extract properties from pdf.js transform
+            // transform is [scaleX, skewY, skewX, scaleY, translateX, translateY]
+            const tx = item.transform;
+            const fontSize = Math.sqrt(tx[2] * tx[2] + tx[3] * tx[3]); // Or simply tx[3] for unrotated
+            const x = tx[4];
+            const y = tx[5];
+            const width = item.width;
+            // height is roughly the font size
+            const height = fontSize;
 
-        // 2. Draw the new text
-        // Calculate character spacing to match the original width
-        // pdf-lib's drawText doesn't have a direct "letter spacing" parameter, 
-        // but we can draw character by character if needed, or rely on standard spacing
-        // For simplicity, we draw it as a single string. If exact spacing is needed, 
-        // one must iterate characters and space them evenly over 'width'.
-        
-        // We'll calculate a wordSpacing or character space workaround
-        const textWidth = helveticaFont.widthOfTextAtSize(mod.newText, fontSize);
-        const extraSpace = width - textWidth;
-        const charSpacing = mod.newText.length > 1 ? extraSpace / (mod.newText.length - 1) : 0;
-
-        // Draw char by char to ensure exact width matching
-        let currentX = x;
-        for (let i = 0; i < mod.newText.length; i++) {
-            const char = mod.newText[i];
-            page.drawText(char, {
-                x: currentX,
-                y: y + (fontSize * 0.2), // slight baseline adjustment
-                size: fontSize,
-                font: helveticaFont,
-                color: PDFLib.rgb(0, 0, 0), // Black (default)
+            // 1. Draw a white redaction rectangle over the old text
+            page.drawRectangle({
+                x: x,
+                y: y - (fontSize * 0.2), // Adjust down slightly to cover descenders
+                width: width,
+                height: height * 1.2, 
+                color: PDFLib.rgb(1, 1, 1), // White
             });
-            currentX += helveticaFont.widthOfTextAtSize(char, fontSize) + charSpacing;
-        }
-    }
+            
+            const textWidth = helveticaFont.widthOfTextAtSize(mod.newText, fontSize);
+            const extraSpace = width - textWidth;
+            const charSpacing = mod.newText.length > 1 ? extraSpace / (mod.newText.length - 1) : 0;
 
-    // Save and download
-    const modifiedBytes = await pdfDoc.save();
-    const blob = new Blob([modifiedBytes], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'modified_document.pdf';
-    a.click();
-    
-    URL.revokeObjectURL(url);
+            let currentX = x;
+            for (let i = 0; i < mod.newText.length; i++) {
+                const char = mod.newText[i];
+                page.drawText(char, {
+                    x: currentX,
+                    y: y, // Use exact baseline y
+                    size: fontSize,
+                    font: helveticaFont,
+                    color: PDFLib.rgb(0, 0, 0), // Black
+                });
+                currentX += helveticaFont.widthOfTextAtSize(char, fontSize) + charSpacing;
+            }
+        }
+
+        // Save and download
+        const modifiedBytes = await pdfDoc.save();
+        const blob = new Blob([modifiedBytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'modified_document.pdf';
+        a.click();
+        
+        URL.revokeObjectURL(url);
+    } catch (err) {
+        console.error(err);
+        alert("An error occurred during download: " + err.message);
+    } finally {
+        downloadBtn.disabled = false;
+        downloadBtn.textContent = 'Download Modified PDF';
+    }
 });
