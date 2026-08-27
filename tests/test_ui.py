@@ -66,7 +66,7 @@ def test_pdf_editor():
 
     print("Running visual diff with diff-pdf...")
     import subprocess
-    result = subprocess.run(['nix-shell', '-p', 'diff-pdf', '--run', f'diff-pdf --output-diff=diff_output.pdf dummy.pdf {download_path}'], capture_output=True)
+    result = subprocess.run(['nix-shell', '-p', 'diff-pdf', '--run', f'diff-pdf --output-diff=diff_output.pdf dummy_standard.pdf {download_path}'], capture_output=True)
     if result.returncode != 0:
         print("Visual differences found! Check diff_output.pdf")
         print("diff-pdf output:")

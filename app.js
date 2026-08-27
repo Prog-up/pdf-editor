@@ -407,38 +407,52 @@ downloadBtn.addEventListener('click', async () => {
         fontCache = {}; // Reset cache for new doc
 
         for (const mod of modifications) {
+            // If the user replaced a string with the exact same string, do not apply any visual changes.
+            if (mod.newText === mod.originalStr) {
+                continue;
+            }
+
             const page = pages[mod.pageIndex];
             
             const item = mod.item;
-            const tx = item.transform;
-            const fontSize = Math.sqrt(tx[2] * tx[2] + tx[3] * tx[3]);
-            
-            // Determine font based on user selection
             const font = await getFontForMod(pdfDoc, mod);
-
-            // Convert relative screen rect to PDF coordinates
-            const pdfX = mod.relRect.left / currentScale;
+            const tx = item.transform;
+            const fontSize = Math.sqrt((tx[2] * tx[2]) + (tx[3] * tx[3]));
+            
+            // Recompute PDF width based on the visual box
             const pdfWidth = mod.relRect.width / currentScale;
+            const pdfHeight = mod.relRect.height / currentScale;
+            const pdfX = mod.relRect.left / currentScale;
+            const pdfY = viewport.height - (mod.relRect.bottom / currentScale);
+            
             // The baseline Y in PDF coordinates is tx[5].
             const baselineY = tx[5];
+
+            // Calculate true PDF width of the replaced text
+            let truePdfWidth = pdfWidth;
+            if (mod.originalStr.trim() === item.str.trim()) {
+                truePdfWidth = item.width;
+            } else {
+                truePdfWidth = item.width * (mod.originalStr.length / item.str.length);
+            }
 
             // Draw white redaction rectangle EXACTLY over the highlight box
             page.drawRectangle({
                 x: pdfX,
                 y: baselineY - (fontSize * 0.2), 
-                width: pdfWidth,
+                width: truePdfWidth,
                 height: fontSize * 1.2, 
                 color: PDFLib.rgb(1, 1, 1), 
             });
             
-            // Calculate if we need to horizontally scale down (e.g., fallback font is wider than original Arial Narrow)
+            // Calculate if we need to horizontally scale down
             const textWidth = font.widthOfTextAtSize(mod.newText, fontSize);
             let scaleFactor = 100;
             const fontColor = PDFLib.rgb(mod.colorArray[0]/255, mod.colorArray[1]/255, mod.colorArray[2]/255);
             
             // Only scale down (compress), never scale up. Limit compression to 60% to remain readable.
-            if (textWidth > pdfWidth) {
-                scaleFactor = Math.max((pdfWidth / textWidth) * 100, 60);
+            if (textWidth > truePdfWidth) {
+                scaleFactor = Math.max((truePdfWidth / textWidth) * 100, 60);
             }
             
             if (scaleFactor !== 100) {
