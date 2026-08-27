@@ -354,12 +354,13 @@ saveBtn.addEventListener('click', () => {
     overlay.style.height = `${currentEditContext.relRect.height}px`;
     overlay.style.backgroundColor = 'white';
     overlay.style.color = cssColor;
-    overlay.style.zIndex = '5';
+    overlay.style.fontSize = `${currentEditContext.relRect.height * 0.8}px`; // approximate
     overlay.style.display = 'flex';
     overlay.style.alignItems = 'center';
-    overlay.style.justifyContent = 'space-between'; // stretch characters
-    overlay.style.fontFamily = 'sans-serif'; // approximate
-    overlay.innerHTML = newText.split('').map(c => `<span>${c === ' ' ? '&nbsp;' : c}</span>`).join('');
+    overlay.style.justifyContent = 'flex-start'; // Align normally
+    overlay.style.fontFamily = currentEditContext.autoFont || fontSelect.value || 'sans-serif'; // Try to use the actual font name
+    overlay.style.whiteSpace = 'pre'; // Preserve spaces
+    overlay.textContent = newText;
     document.getElementById('pdf-container').appendChild(overlay);
 
     popup.classList.add('hidden');
@@ -423,23 +424,15 @@ downloadBtn.addEventListener('click', async () => {
                 color: PDFLib.rgb(1, 1, 1), 
             });
             
-            const textWidth = font.widthOfTextAtSize(mod.newText, fontSize);
-            const extraSpace = pdfWidth - textWidth;
-            const charSpacing = mod.newText.length > 1 ? extraSpace / (mod.newText.length - 1) : 0;
             const fontColor = PDFLib.rgb(mod.colorArray[0]/255, mod.colorArray[1]/255, mod.colorArray[2]/255);
 
-            let currentX = pdfX;
-            for (let i = 0; i < mod.newText.length; i++) {
-                const char = mod.newText[i];
-                page.drawText(char, {
-                    x: currentX,
-                    y: baselineY, 
-                    size: fontSize,
-                    font: font,
-                    color: fontColor, 
-                });
-                currentX += font.widthOfTextAtSize(char, fontSize) + charSpacing;
-            }
+            page.drawText(mod.newText, {
+                x: pdfX,
+                y: baselineY, 
+                size: fontSize,
+                font: font,
+                color: fontColor, 
+            });
         }
 
         const modifiedBytes = await pdfDoc.save();
