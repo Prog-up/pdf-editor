@@ -15,16 +15,27 @@
     <script src="https://unpkg.com/@pdf-lib/fontkit/dist/fontkit.umd.min.js"></script>
 </head>
 <body>
-    <div class="toolbar">
-        <input type="file" id="file-upload" accept="application/pdf">
+        <div class="toolbar">
+        <div class="toolbar-section">
+            <button id="browse-btn">Browse PDF</button>
+            <input type="file" id="file-upload" accept="application/pdf" style="display: none;">
+            
+            <button id="add-font-btn">Add Font (.ttf)</button>
+            <input type="file" id="add-font-upload" accept=".ttf" style="display: none;">
+            
+            <button id="download-btn" disabled>Download Modified PDF</button>
+        </div>
         
-        <div id="pagination-controls" style="display: none;">
+        <div class="toolbar-section toolbar-center" id="pagination-controls" style="visibility: hidden;">
             <button id="prev-page-btn">Previous</button>
             <span id="page-info">Page 1</span>
             <button id="next-page-btn">Next</button>
         </div>
 
-        <button id="download-btn" disabled>Download Modified PDF</button>
+        <div class="toolbar-section toolbar-right" id="edit-controls" style="visibility: hidden;">
+            <input type="text" id="edit-input" autocomplete="off" placeholder="Select text to edit...">
+            <button id="save-edit-btn">Save</button>
+        </div>
     </div>
 
     <div id="pdf-container">
@@ -32,28 +43,6 @@
         <canvas id="pdf-canvas"></canvas>
         <!-- Text layer for highlighting -->
         <div id="text-layer" class="textLayer"></div>
-    </div>
-
-    <!-- The Popup for editing text -->
-    <div id="edit-popup" class="hidden">
-        <div class="popup-header">Edit Text (Same length)</div>
-        <input type="text" id="edit-input" autocomplete="off">
-        
-        <select id="edit-font">
-            <option value="Helvetica">Helvetica</option>
-            <option value="Helvetica-Bold">Helvetica Bold</option>
-            <option value="Times-Roman">Times Roman</option>
-            <option value="Times-Bold">Times Bold</option>
-            <option value="Courier">Courier</option>
-            <option value="Courier-Bold">Courier Bold</option>
-            <option value="custom">Upload Custom Font (.ttf)...</option>
-        </select>
-        <input type="file" id="custom-font-upload" accept=".ttf,.otf" style="display:none">
-
-        <div class="popup-actions">
-            <button id="save-edit-btn">Save</button>
-            <button id="cancel-edit-btn">Cancel</button>
-        </div>
     </div>
 
     <script src="app.js"></script>

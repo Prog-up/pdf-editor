@@ -13,9 +13,25 @@ body {
     color: white;
     padding: 10px;
     display: flex;
-    gap: 10px;
+    justify-content: space-between;
     align-items: center;
 }
+
+.toolbar-section {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex: 1;
+}
+
+.toolbar-center {
+    justify-content: center;
+}
+
+.toolbar-right {
+    justify-content: flex-end;
+}
+
 
 #pdf-container {
     position: relative;
@@ -34,55 +50,29 @@ body {
     opacity: 0.2; /* Set to > 0 for debugging, usually 0 */
 }
 
-/* Edit Popup styling */
-#edit-popup {
-    position: absolute;
-    background: white;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    padding: 10px;
-    z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-#edit-popup.hidden {
-    display: none;
-}
-
-.popup-header {
-    font-size: 12px;
-    color: #666;
-    font-weight: bold;
-}
-
-#edit-input {
-    font-family: inherit; /* Will be set dynamically */
-    padding: 4px;
-    border: 1px solid #007bff;
-    border-radius: 2px;
-}
-
-.popup-actions {
-    display: flex;
-    gap: 5px;
-    justify-content: flex-end;
-}
-
-.popup-actions button {
+button {
     cursor: pointer;
-    padding: 4px 8px;
+    padding: 6px 12px;
     border: none;
-    border-radius: 3px;
+    border-radius: 4px;
+    background-color: #555;
+    color: white;
+}
+
+button:hover {
+    background-color: #777;
+}
+
+button:disabled {
+    background-color: #444;
+    color: #888;
+    cursor: not-allowed;
 }
 
 #save-edit-btn {
     background-color: #007bff;
-    color: white;
 }
 
-#cancel-edit-btn {
-    background-color: #ddd;
+#save-edit-btn:hover {
+    background-color: #0056b3;
 }

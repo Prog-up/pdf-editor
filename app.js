@@ -7,6 +7,8 @@ let modifications = [];
 
 // UI Elements
 const fileInput = document.getElementById('file-upload');
+const browseBtn = document.getElementById('browse-btn');
+browseBtn.addEventListener('click', () => fileInput.click());
 const canvas = document.getElementById('pdf-canvas');
 const ctx = canvas.getContext('2d');
 const textLayerDiv = document.getElementById('text-layer');
@@ -15,18 +17,18 @@ const prevPageBtn = document.getElementById('prev-page-btn');
 const nextPageBtn = document.getElementById('next-page-btn');
 const pageInfo = document.getElementById('page-info');
 const paginationControls = document.getElementById('pagination-controls');
+const addFontBtn = document.getElementById('add-font-btn');
+const addFontUpload = document.getElementById('add-font-upload');
 
-// Popup Elements
-const popup = document.getElementById('edit-popup');
+// Edit Controls
+const editControls = document.getElementById('edit-controls');
 const editInput = document.getElementById('edit-input');
-const fontSelect = document.getElementById('edit-font');
-const customFontUpload = document.getElementById('custom-font-upload');
 const saveBtn = document.getElementById('save-edit-btn');
-const cancelBtn = document.getElementById('cancel-edit-btn');
 
 let currentEditContext = null;
 let customFontBytes = null;
 let fontCache = {}; // Cache loaded standard fonts
+let USER_FONTS = {}; // Stores { 'FontName': ArrayBuffer } for fonts added by the user
 
 const STANDARD_FONTS = [
     'Times-Roman', 'Times-Bold', 'Times-Italic', 'Times-BoldItalic',
@@ -95,7 +97,7 @@ fileInput.addEventListener('change', async (e) => {
                         let realName = fName.includes('+') ? fName.split('+')[1] : fName;
                         
                         // Resolve standard or server font
-                        if (!STANDARD_FONTS.includes(realName) && !SERVER_FONTS[realName] && fontSelect.value !== 'custom') {
+                        if (!STANDARD_FONTS.includes(realName) && !SERVER_FONTS[realName] && !USER_FONTS[realName]) {
                             unsupportedFonts.add(realName);
                         }
                     } catch (e) {
@@ -122,9 +124,6 @@ fileInput.addEventListener('change', async (e) => {
         paginationControls.style.display = 'flex';
         
         // Hide the manual font selector if they didn't explicitly choose custom!
-        if (fontSelect.value !== 'custom') {
-            fontSelect.style.display = 'none';
-        }
         
         currentPage = 1;
         renderPage(currentPage);
@@ -266,7 +265,7 @@ textLayerDiv.addEventListener('mouseup', (e) => {
                 let fName = (fontObj && fontObj.name) ? fontObj.name : detectedFont;
                 let realName = fName.includes('+') ? fName.split('+')[1] : fName;
                 
-                if (STANDARD_FONTS.includes(realName) || SERVER_FONTS[realName]) {
+                if (STANDARD_FONTS.includes(realName) || SERVER_FONTS[realName] || USER_FONTS[realName]) {
                     detectedFontFamily = realName;
                 }
             } catch (e) {
@@ -281,46 +280,22 @@ textLayerDiv.addEventListener('mouseup', (e) => {
         console.log("Found intersecting item:", intersectingItem.str);
 
 
-        showPopup(relRect.left + 10, relRect.top + 10, intersectingItem, selectedText, relRect, detectedFontFamily, detectedItemIndex);
+        showPopup(intersectingItem, selectedText, relRect, detectedFontFamily, detectedItemIndex);
     }, 10);
 });
 
-function showPopup(x, y, item, selectedText, relRect, autoFont, itemIndex) {
+function showPopup(item, selectedText, relRect, autoFont, itemIndex) {
     currentEditContext = { item, originalStr: selectedText, relRect, autoFont, itemIndex };
-    
-    popup.style.left = `${x}px`;
-    popup.style.top = `${y + 20}px`;
-    popup.classList.remove('hidden');
-    
-    editInput.value = selectedText; 
-    editInput.maxLength = selectedText.length; 
-    
-    editInput.style.width = `${Math.max(100, relRect.width)}px`;
+    editControls.style.visibility = "visible";
+    editInput.disabled = false;
+    saveBtn.disabled = false;
+    editInput.value = selectedText;
+    editInput.maxLength = selectedText.length;
     editInput.focus();
-    console.log("Popup shown");
 }
 
-fontSelect.addEventListener('change', (e) => {
-    if (e.target.value === 'custom') {
-        customFontUpload.click();
-    }
-});
 
-customFontUpload.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (file) {
-        customFontBytes = await file.arrayBuffer();
-        alert("Custom font loaded successfully!");
-    } else {
-        fontSelect.value = 'Helvetica'; // Reset if cancelled
-    }
-});
 
-cancelBtn.addEventListener('click', () => {
-    popup.classList.add('hidden');
-    currentEditContext = null;
-    window.getSelection().removeAllRanges();
-});
 
 saveBtn.addEventListener('click', () => {
     if (!currentEditContext) return;
@@ -331,10 +306,6 @@ saveBtn.addEventListener('click', () => {
         return;
     }
 
-    if (fontSelect.value === 'custom' && !customFontBytes) {
-        alert("Please upload a custom font file first, or select a standard font.");
-        return;
-    }
 
     const fontColorArray = currentEditContext.item.color || [0, 0, 0];
     const cssColor = `rgb(${fontColorArray[0]}, ${fontColorArray[1]}, ${fontColorArray[2]})`;
@@ -349,8 +320,6 @@ saveBtn.addEventListener('click', () => {
         item: currentEditContext.item,
         itemIndex: currentEditContext.itemIndex,
         newText: newText.padEnd(currentEditContext.originalStr.length, ' '), 
-        fontChoice: fontSelect.value,
-        customFontBytes: fontSelect.value === 'custom' ? customFontBytes : null,
         autoFont: currentEditContext.autoFont,
         relRect: currentEditContext.relRect,
         originalStr: currentEditContext.originalStr,
@@ -371,28 +340,30 @@ saveBtn.addEventListener('click', () => {
     overlay.style.display = 'flex';
     overlay.style.alignItems = 'center';
     overlay.style.justifyContent = 'flex-start'; // Align normally
-    overlay.style.fontFamily = currentEditContext.autoFont || fontSelect.value || 'sans-serif'; // Try to use the actual font name
+    overlay.style.fontFamily = currentEditContext.autoFont || 'sans-serif'; // Try to use the actual font name
     overlay.style.whiteSpace = 'pre'; // Preserve spaces
     overlay.textContent = newText;
     document.getElementById('pdf-container').appendChild(overlay);
 
-    popup.classList.add('hidden');
+    editControls.style.visibility = 'hidden'; editInput.disabled = true; saveBtn.disabled = true;
     currentEditContext = null;
     window.getSelection().removeAllRanges();
-    alert("Edit saved. Click 'Download Modified PDF' when done.");
 });
 
 async function getFontForMod(pdfDoc, mod) {
-    if (mod.fontChoice === 'custom' && mod.customFontBytes) {
-        // Register fontkit if it hasn't been already
-        if (!pdfDoc.isFontkitRegistered) {
-            pdfDoc.registerFontkit(fontkit);
-            pdfDoc.isFontkitRegistered = true;
-        }
-        return await pdfDoc.embedFont(mod.customFontBytes);
-    }
     
-    const fontEnum = mod.autoFont || mod.fontChoice; // Use auto detected font if available
+    const fontEnum = mod.autoFont; // Use auto detected font if available
+    
+    if (USER_FONTS[fontEnum]) {
+        if (!fontCache[fontEnum]) {
+            if (!pdfDoc.isFontkitRegistered) {
+                pdfDoc.registerFontkit(fontkit);
+                pdfDoc.isFontkitRegistered = true;
+            }
+            fontCache[fontEnum] = await pdfDoc.embedFont(USER_FONTS[fontEnum]);
+        }
+        return fontCache[fontEnum];
+    }
     
     if (SERVER_FONTS[fontEnum]) {
         if (!fontCache[fontEnum]) {
@@ -506,5 +477,36 @@ downloadBtn.addEventListener('click', async () => {
     } finally {
         downloadBtn.disabled = false;
         downloadBtn.textContent = 'Download Modified PDF';
+    }
+});
+
+addFontBtn.addEventListener('click', () => {
+    addFontUpload.click();
+});
+
+addFontUpload.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        try {
+            const buffer = await file.arrayBuffer();
+            const font = window.fontkit.create(new Uint8Array(buffer));
+            const fontName = font.postscriptName;
+            USER_FONTS[fontName] = buffer;
+            USER_FONTS[font.familyName] = buffer;
+            // Add a stripped name for standard matching
+            let strippedName = fontName.includes('+') ? fontName.split('+')[1] : fontName;
+            USER_FONTS[strippedName] = buffer;
+            alert(`Added font: ${fontName}`);
+        } catch (err) {
+            console.error(err);
+            alert("Failed to load font. Make sure it is a valid TTF/OTF file.");
+        }
+    }
+    addFontUpload.value = ''; // Reset
+});
+
+editInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        saveBtn.click();
     }
 });
