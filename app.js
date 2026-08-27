@@ -35,6 +35,25 @@ const STANDARD_FONTS = [
     'Symbol', 'ZapfDingbats'
 ];
 
+const FONT_ALIASES = {
+    'Arial': 'Helvetica',
+    'ArialMT': 'Helvetica',
+    'Arial-BoldMT': 'Helvetica-Bold',
+    'Arial,Bold': 'Helvetica-Bold',
+    'Arial,Italic': 'Helvetica-Oblique',
+    'Arial,BoldItalic': 'Helvetica-BoldOblique',
+    'ArialNarrow': 'Helvetica',
+    'TimesNewRoman': 'Times-Roman',
+    'TimesNewRomanPSMT': 'Times-Roman',
+    'TimesNewRoman,Bold': 'Times-Bold',
+    'TimesNewRoman,Italic': 'Times-Italic',
+    'TimesNewRoman,BoldItalic': 'Times-BoldItalic',
+    'CourierNew': 'Courier',
+    'CourierNew,Bold': 'Courier-Bold',
+    'CourierNew,Italic': 'Courier-Oblique',
+    'CourierNew,BoldItalic': 'Courier-BoldOblique'
+};
+
 // Handle file upload
 fileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -77,7 +96,13 @@ fileInput.addEventListener('change', async (e) => {
                                 resolved = true;
                                 clearTimeout(timeout);
                                 let fName = (font && font.name) ? font.name : fontId;
-                                const realName = fName.includes('+') ? fName.split('+')[1] : fName;
+                                let realName = fName.includes('+') ? fName.split('+')[1] : fName;
+                                
+                                // Resolve aliases
+                                if (FONT_ALIASES[realName]) {
+                                    realName = FONT_ALIASES[realName];
+                                }
+                                
                                 if (!STANDARD_FONTS.includes(realName) && fontSelect.value !== 'custom') {
                                     unsupportedFonts.add(realName);
                                 }
@@ -194,6 +219,8 @@ textLayerDiv.addEventListener('mouseup', (e) => {
         let intersectingItem = null;
         let detectedFont = null;
         let detectedColor = null;
+        let detectedFontFamily = 'Helvetica'; // Fallback
+        let detectedItemIndex = -1;
 
         for (const span of spans) {
             const spanRect = span.getBoundingClientRect();
@@ -212,6 +239,21 @@ textLayerDiv.addEventListener('mouseup', (e) => {
                         detectedFont = item.fontName;
                         detectedColor = itemColorStr;
                         intersectingItem = item;
+                        detectedItemIndex = index;
+                        
+                        // Extract standard font name synchronously if possible, or trigger it
+                        page.objs.get(detectedFont, (fontObj) => {
+                            let fName = (fontObj && fontObj.name) ? fontObj.name : detectedFont;
+                            let realName = fName.includes('+') ? fName.split('+')[1] : fName;
+                            
+                            if (FONT_ALIASES[realName]) {
+                                realName = FONT_ALIASES[realName];
+                            }
+                            
+                            if (STANDARD_FONTS.includes(realName)) {
+                                detectedFontFamily = realName;
+                            }
+                        });
                     } else if (detectedFont !== item.fontName || detectedColor !== itemColorStr) {
                         alert("Error: You cannot highlight text that spans multiple fonts or colors.");
                         window.getSelection().removeAllRanges();
@@ -219,6 +261,7 @@ textLayerDiv.addEventListener('mouseup', (e) => {
                     }
                 } else if (!intersectingItem) {
                     intersectingItem = item; // Fallback to space if absolutely nothing else is found
+                    detectedItemIndex = index;
                 }
             }
         }
@@ -234,12 +277,12 @@ textLayerDiv.addEventListener('mouseup', (e) => {
             height: totalRect.bottom - totalRect.top
         };
 
-        showPopup(relRect.left + 10, relRect.top + 10, intersectingItem, selectedText, relRect);
+        showPopup(relRect.left + 10, relRect.top + 10, intersectingItem, selectedText, relRect, detectedFontFamily, detectedItemIndex);
     }, 10);
 });
 
-function showPopup(x, y, item, selectedText, relRect) {
-    currentEditContext = { item, originalStr: selectedText, relRect };
+function showPopup(x, y, item, selectedText, relRect, autoFont, itemIndex) {
+    currentEditContext = { item, originalStr: selectedText, relRect, autoFont, itemIndex };
     
     popup.style.left = `${x}px`;
     popup.style.top = `${y + 20}px`;
@@ -291,13 +334,22 @@ saveBtn.addEventListener('click', () => {
     const fontColorArray = currentEditContext.item.color || [0, 0, 0];
     const cssColor = `rgb(${fontColorArray[0]}, ${fontColorArray[1]}, ${fontColorArray[2]})`;
 
+    // Remove any previous edit for this exact text item to prevent stacking
+    modifications = modifications.filter(mod => 
+        !(mod.pageIndex === (currentPage - 1) && mod.itemIndex === currentEditContext.itemIndex)
+    );
+
     modifications.push({
         pageIndex: currentPage - 1, 
         item: currentEditContext.item,
+        itemIndex: currentEditContext.itemIndex,
         newText: newText.padEnd(currentEditContext.originalStr.length, ' '), 
         fontChoice: fontSelect.value,
         customFontBytes: fontSelect.value === 'custom' ? customFontBytes : null,
+        autoFont: currentEditContext.autoFont,
         relRect: currentEditContext.relRect,
+        originalStr: currentEditContext.originalStr,
+        cssColor: cssColor,
         colorArray: fontColorArray
     });
     
