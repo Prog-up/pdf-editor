@@ -424,7 +424,19 @@ downloadBtn.addEventListener('click', async () => {
                 color: PDFLib.rgb(1, 1, 1), 
             });
             
+            // Calculate if we need to horizontally scale down (e.g., fallback font is wider than original Arial Narrow)
+            const textWidth = font.widthOfTextAtSize(mod.newText, fontSize);
+            let scaleFactor = 100;
             const fontColor = PDFLib.rgb(mod.colorArray[0]/255, mod.colorArray[1]/255, mod.colorArray[2]/255);
+            
+            // Only scale down (compress), never scale up. Limit compression to 60% to remain readable.
+            if (textWidth > pdfWidth) {
+                scaleFactor = Math.max((pdfWidth / textWidth) * 100, 60);
+            }
+            
+            if (scaleFactor !== 100) {
+                page.pushOperators(PDFLib.PDFOperator.of('Tz', [PDFLib.PDFNumber.of(scaleFactor)]));
+            }
 
             page.drawText(mod.newText, {
                 x: pdfX,
@@ -433,6 +445,10 @@ downloadBtn.addEventListener('click', async () => {
                 font: font,
                 color: fontColor, 
             });
+            
+            if (scaleFactor !== 100) {
+                page.pushOperators(PDFLib.PDFOperator.of('Tz', [PDFLib.PDFNumber.of(100)])); // Reset
+            }
         }
 
         const modifiedBytes = await pdfDoc.save();
