@@ -35,29 +35,29 @@ const STANDARD_FONTS = [
     'Symbol', 'ZapfDingbats'
 ];
 
-const FONT_ALIASES = {
-    'Arial': 'Helvetica',
-    'ArialMT': 'Helvetica',
-    'Arial-BoldMT': 'Helvetica-Bold',
-    'Arial,Bold': 'Helvetica-Bold',
-    'Arial,Italic': 'Helvetica-Oblique',
-    'Arial,BoldItalic': 'Helvetica-BoldOblique',
-    'ArialNarrow': 'Helvetica',
-    'ArialNarrow-Bold': 'Helvetica-Bold',
-    'ArialNarrow-Italic': 'Helvetica-Oblique',
-    'ArialNarrow-BoldItalic': 'Helvetica-BoldOblique',
-    'ArialNarrow,Bold': 'Helvetica-Bold',
-    'ArialNarrow,Italic': 'Helvetica-Oblique',
-    'ArialNarrow,BoldItalic': 'Helvetica-BoldOblique',
-    'TimesNewRoman': 'Times-Roman',
-    'TimesNewRomanPSMT': 'Times-Roman',
-    'TimesNewRoman,Bold': 'Times-Bold',
-    'TimesNewRoman,Italic': 'Times-Italic',
-    'TimesNewRoman,BoldItalic': 'Times-BoldItalic',
-    'CourierNew': 'Courier',
-    'CourierNew,Bold': 'Courier-Bold',
-    'CourierNew,Italic': 'Courier-Oblique',
-    'CourierNew,BoldItalic': 'Courier-BoldOblique'
+const SERVER_FONTS = {
+    'Arial': 'fonts/Arial.ttf',
+    'ArialMT': 'fonts/Arial.ttf',
+    'Arial-BoldMT': 'fonts/Arial-Bold.ttf',
+    'Arial,Bold': 'fonts/Arial-Bold.ttf',
+    'Arial,Italic': 'fonts/Arial-Italic.ttf',
+    'Arial,BoldItalic': 'fonts/Arial-BoldItalic.ttf',
+    'ArialNarrow': 'fonts/ArialNarrow.ttf',
+    'ArialNarrow-Bold': 'fonts/ArialNarrow.ttf', // Fallback to regular narrow since we don't have bold narrow
+    'ArialNarrow-Italic': 'fonts/ArialNarrow.ttf',
+    'ArialNarrow-BoldItalic': 'fonts/ArialNarrow.ttf',
+    'ArialNarrow,Bold': 'fonts/ArialNarrow.ttf',
+    'ArialNarrow,Italic': 'fonts/ArialNarrow.ttf',
+    'ArialNarrow,BoldItalic': 'fonts/ArialNarrow.ttf',
+    'TimesNewRoman': 'fonts/TimesNewRoman.ttf',
+    'TimesNewRomanPSMT': 'fonts/TimesNewRoman.ttf',
+    'TimesNewRoman,Bold': 'fonts/TimesNewRoman-Bold.ttf',
+    'TimesNewRoman,Italic': 'fonts/TimesNewRoman-Italic.ttf',
+    'TimesNewRoman,BoldItalic': 'fonts/TimesNewRoman-BoldItalic.ttf',
+    'CourierNew': 'fonts/CourierNew.ttf',
+    'CourierNew,Bold': 'fonts/CourierNew-Bold.ttf',
+    'CourierNew,Italic': 'fonts/CourierNew-Italic.ttf',
+    'CourierNew,BoldItalic': 'fonts/CourierNew-BoldItalic.ttf'
 };
 
 // Handle file upload
@@ -94,12 +94,8 @@ fileInput.addEventListener('change', async (e) => {
                         let fName = (font && font.name) ? font.name : fontId;
                         let realName = fName.includes('+') ? fName.split('+')[1] : fName;
                         
-                        // Resolve aliases
-                        if (FONT_ALIASES[realName]) {
-                            realName = FONT_ALIASES[realName];
-                        }
-                        
-                        if (!STANDARD_FONTS.includes(realName) && fontSelect.value !== 'custom') {
+                        // Resolve standard or server font
+                        if (!STANDARD_FONTS.includes(realName) && !SERVER_FONTS[realName] && fontSelect.value !== 'custom') {
                             unsupportedFonts.add(realName);
                         }
                     } catch (e) {
@@ -236,11 +232,7 @@ textLayerDiv.addEventListener('mouseup', (e) => {
                             let fName = (fontObj && fontObj.name) ? fontObj.name : detectedFont;
                             let realName = fName.includes('+') ? fName.split('+')[1] : fName;
                             
-                            if (FONT_ALIASES[realName]) {
-                                realName = FONT_ALIASES[realName];
-                            }
-                            
-                            if (STANDARD_FONTS.includes(realName)) {
+                            if (STANDARD_FONTS.includes(realName) || SERVER_FONTS[realName]) {
                                 detectedFontFamily = realName;
                             }
                         } catch (e) {
@@ -379,8 +371,23 @@ async function getFontForMod(pdfDoc, mod) {
         return await pdfDoc.embedFont(mod.customFontBytes);
     }
     
-    // Otherwise it's a standard font
     const fontEnum = mod.autoFont || mod.fontChoice; // Use auto detected font if available
+    
+    if (SERVER_FONTS[fontEnum]) {
+        if (!fontCache[fontEnum]) {
+            if (!pdfDoc.isFontkitRegistered) {
+                pdfDoc.registerFontkit(fontkit);
+                pdfDoc.isFontkitRegistered = true;
+            }
+            const res = await fetch(SERVER_FONTS[fontEnum]);
+            if (!res.ok) throw new Error("Could not fetch server font " + SERVER_FONTS[fontEnum]);
+            const fontBytes = await res.arrayBuffer();
+            fontCache[fontEnum] = await pdfDoc.embedFont(fontBytes);
+        }
+        return fontCache[fontEnum];
+    }
+    
+    // Otherwise it's a standard font
     if (!fontCache[fontEnum]) {
         fontCache[fontEnum] = await pdfDoc.embedFont(fontEnum);
     }
