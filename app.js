@@ -121,7 +121,7 @@ fileInput.addEventListener('change', async (e) => {
         pdfBytes = typedArray;
         pdfDocument = await pdfjsLib.getDocument(typedArray.slice(0)).promise;
         downloadBtn.disabled = false;
-        paginationControls.style.display = 'flex';
+        paginationControls.style.visibility = 'visible';
         
         // Hide the manual font selector if they didn't explicitly choose custom!
         
