@@ -5,18 +5,12 @@ on:
     branches:
       - main
     tags:
-      - "v*.*.*"
-      - "[0-9]+.[0-9]+.[0-9]+"
-      - "*.*.*"
+      - 'v*.*.*'
+      - '*.*.*'
   pull_request:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Optional custom image tag to push (e.g. 1.0.0 or v1.0.0)"
-        required: false
-        type: string
 
 jobs:
   build-scan-push:
@@ -24,12 +18,12 @@ jobs:
     permissions:
       contents: read
       packages: write
-      id-token: write # Required for keyless signing via Sigstore Cosign
+      id-token: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3.5.0
 
@@ -39,75 +33,54 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "pdf-editor:local"
-          format: "table"
-          exit-code: "1" # Fails the build if vulnerabilities are found
+          image-ref: 'pdf-editor:local'
+          format: 'table'
+          exit-code: '1'
           ignore-unfixed: true
-          vuln-type: "os,library"
-          severity: "CRITICAL,HIGH"
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
 
       - name: Login to Docker Hub
-        if: github.event_name != "pull_request"
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Tag, Push, and Sign Docker image
-        if: github.event_name != "pull_request"
+        if: github.event_name != 'pull_request'
         run: |
           IMAGE_NAME="${{ secrets.DOCKERHUB_USERNAME }}/pdf-editor"
-          
-          # Tag the image with "latest" and the git commit SHA
-          docker tag pdf-editor:local $IMAGE_NAME:latest
-          docker tag pdf-editor:local $IMAGE_NAME:${{ github.sha }}
-          
-          # Push both tags to Docker Hub
-          docker push $IMAGE_NAME:latest
-          docker push $IMAGE_NAME:${{ github.sha }}
-          
-          push_semver_tags() {
-            local tag="$1"
-            echo "Pushing tag: $tag"
-            docker tag pdf-editor:local "$IMAGE_NAME:$tag"
-            docker push "$IMAGE_NAME:$tag"
 
-            # Push without "v" prefix if present
-            local stripped="${tag#v}"
-            if [[ "$stripped" != "$tag" ]]; then
-              echo "Pushing stripped tag: $stripped"
-              docker tag pdf-editor:local "$IMAGE_NAME:$stripped"
-              docker push "$IMAGE_NAME:$stripped"
-            fi
+          docker tag pdf-editor:local "$IMAGE_NAME:latest"
+          docker tag pdf-editor:local "$IMAGE_NAME:${{ github.sha }}"
 
-            # Push with "v" prefix if missing
-            if [[ "$tag" != v* ]]; then
-              echo "Pushing v-prefixed tag: v$tag"
-              docker tag pdf-editor:local "$IMAGE_NAME:v$tag"
-              docker push "$IMAGE_NAME:v$tag"
-            fi
-          }
+          docker push "$IMAGE_NAME:latest"
+          docker push "$IMAGE_NAME:${{ github.sha }}"
 
-          # If this is a git tag (e.g. v1.0.0 or 1.0.0), push the Docker tags as well
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
             GIT_TAG="${GITHUB_REF#refs/tags/}"
             echo "Git tag pushed: $GIT_TAG"
-            push_semver_tags "$GIT_TAG"
+            docker tag pdf-editor:local "$IMAGE_NAME:$GIT_TAG"
+            docker push "$IMAGE_NAME:$GIT_TAG"
+
+            if [[ "$GIT_TAG" == v* ]]; then
+              STRIPPED_TAG="${GIT_TAG#v}"
+              echo "Also pushing stripped tag: $STRIPPED_TAG"
+              docker tag pdf-editor:local "$IMAGE_NAME:$STRIPPED_TAG"
+              docker push "$IMAGE_NAME:$STRIPPED_TAG"
+            else
+              echo "Also pushing v-prefixed tag: v$GIT_TAG"
+              docker tag pdf-editor:local "$IMAGE_NAME:v$GIT_TAG"
+              docker push "$IMAGE_NAME:v$GIT_TAG"
+            fi
           fi
 
-          # If triggered via workflow_dispatch with custom tag input
-          if [[ -n "${{ inputs.tag }}" ]]; then
-            echo "Manual tag input: ${{ inputs.tag }}"
-            push_semver_tags "${{ inputs.tag }}"
-          fi
-          
-          # Extract and output the image hash (digest)
-          IMAGE_DIGEST=$(docker inspect --format="{{index .RepoDigests 0}}" $IMAGE_NAME:latest)
+          IMAGE_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE_NAME:latest")
           echo "======================================"
           echo "Image successfully pushed!"
           echo "Image Hash (Digest): $IMAGE_DIGEST"
           echo "======================================"
-          
-          # Sign the image with Sigstore Cosign (Keyless integrity)
+
           echo "Generating integrity signature for Docker Hub..."
-          cosign sign --yes $IMAGE_DIGEST
+          cosign sign --yes "$IMAGE_DIGEST"
